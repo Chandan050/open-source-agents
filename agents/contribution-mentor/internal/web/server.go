@@ -1,4 +1,4 @@
-package main
+package web
 
 import (
 	"context"
@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"contribution-mentor/internal/mentor"
 )
 
 const (
@@ -22,11 +24,11 @@ const (
 	checkOutputLimit = 1024 * 1024
 )
 
-//go:embed web/*
+//go:embed static/*
 var webFiles embed.FS
 
 type webServer struct {
-	model *ModelClient
+	model *mentor.ModelClient
 }
 
 type askRequest struct {
@@ -80,13 +82,13 @@ func (b *cappedBuffer) String() string {
 	return string(b.data)
 }
 
-func serveWeb(address string, client *ModelClient) error {
+func Start(address string, client *mentor.ModelClient) error {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", address, err)
 	}
 	server := &http.Server{
-		Handler:           newWebHandler(client),
+		Handler:           NewHandler(client),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -95,7 +97,7 @@ func serveWeb(address string, client *ModelClient) error {
 	return nil
 }
 
-func newWebHandler(client *ModelClient) http.Handler {
+func NewHandler(client *mentor.ModelClient) http.Handler {
 	mux := http.NewServeMux()
 	server := &webServer{model: client}
 	mux.HandleFunc("/", server.serveIndex)
@@ -137,7 +139,7 @@ func (s *webServer) serveIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	page, err := webFiles.ReadFile("web/index.html")
+	page, err := webFiles.ReadFile("static/index.html")
 	if err != nil {
 		http.Error(w, "web interface is unavailable", http.StatusInternalServerError)
 		return
@@ -161,7 +163,7 @@ func (s *webServer) ask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "question is required", http.StatusBadRequest)
 		return
 	}
-	repository, err := inspectRepository(input.Repository)
+	repository, err := mentor.InspectRepository(input.Repository)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

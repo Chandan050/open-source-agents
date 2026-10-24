@@ -1,4 +1,4 @@
-package main
+package mentor
 
 import (
 	"context"
@@ -42,7 +42,7 @@ type GitHubClient struct {
 	http    *http.Client
 }
 
-func newGitHubClient() *GitHubClient {
+func NewGitHubClient() *GitHubClient {
 	return &GitHubClient{
 		baseURL: githubAPIURL,
 		token:   strings.TrimSpace(os.Getenv("GITHUB_TOKEN")),

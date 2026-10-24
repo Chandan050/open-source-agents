@@ -1,4 +1,4 @@
-package main
+package web
 
 import (
 	"encoding/json"
@@ -8,10 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"contribution-mentor/internal/mentor"
 )
 
 func TestWebServesInterfaceOnlyOnLoopback(t *testing.T) {
-	handler := newWebHandler(nil)
+	handler := NewHandler(nil)
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.Host = "127.0.0.1:8080"
 	response := httptest.NewRecorder()
@@ -34,18 +36,22 @@ func TestWebServesInterfaceOnlyOnLoopback(t *testing.T) {
 
 func TestWebAskUsesConfiguredModel(t *testing.T) {
 	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request chatRequest
+		var request struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(request.Messages[1].Content, "README.md") {
+		if len(request.Messages) < 2 || !strings.Contains(request.Messages[1].Content, "README.md") {
 			t.Error("expected repository context in model request")
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"Run the focused tests first."}}]}`))
 	}))
 	defer modelServer.Close()
-	client, err := NewModelClient(ModelConfig{
+	client, err := mentor.NewModelClient(mentor.ModelConfig{
 		Provider: "test", BaseURL: modelServer.URL + "/v1", Model: "test-model",
 	})
 	if err != nil {
@@ -61,7 +67,7 @@ func TestWebAskUsesConfiguredModel(t *testing.T) {
 	setLocalWebHeaders(request)
 	response := httptest.NewRecorder()
 
-	newWebHandler(client).ServeHTTP(response, request)
+	NewHandler(client).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
 	}
@@ -87,7 +93,7 @@ func TestWebCheckRunsFixedGoTestCommand(t *testing.T) {
 	setLocalWebHeaders(request)
 	response := httptest.NewRecorder()
 
-	newWebHandler(nil).ServeHTTP(response, request)
+	NewHandler(nil).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
 	}
@@ -105,7 +111,7 @@ func TestWebRejectsCrossOriginAndUnknownChecks(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repository, "go.mod"), []byte("module example.com/webcheck\n\ngo 1.22\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	handler := newWebHandler(nil)
+	handler := NewHandler(nil)
 
 	crossOrigin := httptest.NewRequest(http.MethodPost, "/api/check", strings.NewReader(`{"repository":"`+repository+`","check":"test"}`))
 	crossOrigin.Host = "127.0.0.1:8080"

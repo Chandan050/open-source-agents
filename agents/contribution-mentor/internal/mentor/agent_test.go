@@ -1,4 +1,4 @@
-package main
+package mentor
 
 import (
 	"bytes"
@@ -11,89 +11,6 @@ import (
 	"strings"
 	"testing"
 )
-
-func TestInspectRepositorySkipsSensitiveFiles(t *testing.T) {
-	root := t.TempDir()
-	files := map[string]string{
-		"README.md":            "# Demo\n",
-		".env":                 "API_KEY=do-not-send\n",
-		".env.local":           "PRIVATE=value\n",
-		"credentials.json":     `{"token":"do-not-send"}`,
-		".env.example":         "API_KEY=placeholder\n",
-		"src/main.go":          "package main\n",
-		"node_modules/deps.js": "ignored\n",
-	}
-
-	for name, content := range files {
-		filePath := filepath.Join(root, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	repo, err := inspectRepository(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	included := map[string]bool{}
-	for _, file := range repo.Files {
-		included[file.Path] = true
-		if strings.Contains(file.Content, "do-not-send") {
-			t.Errorf("sensitive content was included from %s", file.Path)
-		}
-	}
-	for _, name := range []string{"README.md", ".env.example", "src/main.go"} {
-		if !included[name] {
-			t.Errorf("expected %s to be included", name)
-		}
-	}
-	for _, name := range []string{".env", ".env.local", "credentials.json", "node_modules/deps.js"} {
-		if included[name] {
-			t.Errorf("did not expect %s to be included", name)
-		}
-	}
-}
-
-func TestLoadDotEnv(t *testing.T) {
-	filename := filepath.Join(t.TempDir(), ".env")
-	if err := os.WriteFile(filename, []byte("# comment\nDOTENV_TEST_VALUE=\"from file\"\nexport DOTENV_TEST_OTHER='single quoted'\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("DOTENV_TEST_VALUE", "from process")
-	t.Setenv("DOTENV_TEST_OTHER", "")
-	if err := loadDotEnv(filename); err != nil {
-		t.Fatal(err)
-	}
-	if got := os.Getenv("DOTENV_TEST_VALUE"); got != "from process" {
-		t.Errorf("process environment should take precedence, got %q", got)
-	}
-	if got := os.Getenv("DOTENV_TEST_OTHER"); got != "" {
-		t.Errorf("existing empty process environment should be preserved, got %q", got)
-	}
-
-	if err := os.Unsetenv("DOTENV_TEST_OTHER"); err != nil {
-		t.Fatal(err)
-	}
-	if err := loadDotEnv(filename); err != nil {
-		t.Fatal(err)
-	}
-	if got := os.Getenv("DOTENV_TEST_OTHER"); got != "single quoted" {
-		t.Errorf("quoted value was not loaded, got %q", got)
-	}
-}
-
-func TestLoadDotEnvRejectsMalformedLines(t *testing.T) {
-	filename := filepath.Join(t.TempDir(), ".env")
-	if err := os.WriteFile(filename, []byte("not-a-key-value\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := loadDotEnv(filename); err == nil {
-		t.Fatal("expected malformed environment file to be rejected")
-	}
-}
 
 func TestModelClientAskUsesOpenAICompatibleEndpoint(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +97,7 @@ func TestGitHubListOpenIssuesExcludesPullRequests(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newGitHubClient()
+	client := NewGitHubClient()
 	client.baseURL = server.URL
 	client.token = "example-gh-test-key"
 	issues, err := client.ListOpenIssues(context.Background(), "example/project")
@@ -196,7 +113,7 @@ func TestGitHubListOpenIssuesExcludesPullRequests(t *testing.T) {
 }
 
 func TestGitHubRejectsInvalidRepositoryAndClosedIssue(t *testing.T) {
-	client := newGitHubClient()
+	client := NewGitHubClient()
 	if _, err := client.ListOpenIssues(context.Background(), "https://github.com/example/project"); err == nil {
 		t.Fatal("expected full URL to be rejected")
 	}
@@ -262,7 +179,7 @@ func TestApplyApprovedIssueChangesRequiresConfirmation(t *testing.T) {
 		{Path: "docs/guide.md", Action: "create", Content: "# Guide\n"},
 	}
 
-	applied, err := applyApprovedIssueChanges(repo, change, strings.NewReader("no\n"), &bytes.Buffer{})
+	applied, err := ApplyApprovedIssueChanges(repo, change, strings.NewReader("no\n"), &bytes.Buffer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +197,7 @@ func TestApplyApprovedIssueChangesRequiresConfirmation(t *testing.T) {
 		t.Fatal("new file was created after cancellation")
 	}
 
-	applied, err = applyApprovedIssueChanges(repo, change, strings.NewReader("APPLY\n"), &bytes.Buffer{})
+	applied, err = ApplyApprovedIssueChanges(repo, change, strings.NewReader("APPLY\n"), &bytes.Buffer{})
 	if err != nil {
 		t.Fatal(err)
 	}

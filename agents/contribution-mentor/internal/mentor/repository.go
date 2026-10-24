@@ -1,4 +1,4 @@
-package main
+package mentor
 
 import (
 	"fmt"
@@ -42,7 +42,7 @@ var includedExtensions = map[string]bool{
 	".yaml": true, ".yml": true,
 }
 
-func inspectRepository(path string) (Repository, error) {
+func InspectRepository(path string) (Repository, error) {
 	root, err := filepath.Abs(path)
 	if err != nil {
 		return Repository{}, fmt.Errorf("resolve path: %w", err)

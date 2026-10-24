@@ -9,17 +9,21 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"contribution-mentor/internal/config"
+	"contribution-mentor/internal/mentor"
+	"contribution-mentor/internal/web"
 )
 
 func main() {
-	if err := loadDotEnv(".env"); err != nil {
+	if err := config.LoadDotEnv(".env"); err != nil {
 		fmt.Fprintf(os.Stderr, "load environment: %v\n", err)
 		os.Exit(2)
 	}
 
 	repoPath := flag.String("repo", ".", "Path to the repository to inspect")
 	question := flag.String("question", envOr("QUESTION", ""), "Question to ask the contribution mentor")
-	web := flag.Bool("web", false, "Start the local web interface")
+	webMode := flag.Bool("web", false, "Start the local web interface")
 	webPort := flag.Int("port", 8080, "Port for the local web interface (bound to 127.0.0.1)")
 	githubRepo := flag.String("github", envOr("GITHUB_REPO", ""), "GitHub repository in owner/name form")
 	experience := flag.String("experience", envOr("EXPERIENCE", ""), "Your experience, skills, and preferred difficulty")
@@ -32,16 +36,16 @@ func main() {
 	implement := flag.Bool("implement", implementDefault, "Propose changes for a selected issue and apply them only after confirmation")
 	flag.Parse()
 
-	if !*web && strings.TrimSpace(*githubRepo) == "" && strings.TrimSpace(*question) == "" {
+	if !*webMode && strings.TrimSpace(*githubRepo) == "" && strings.TrimSpace(*question) == "" {
 		fmt.Fprintln(os.Stderr, "Provide a question with -question.")
 		flag.Usage()
 		os.Exit(2)
 	}
-	if *web && (*webPort < 1 || *webPort > 65535) {
+	if *webMode && (*webPort < 1 || *webPort > 65535) {
 		fmt.Fprintln(os.Stderr, "-port must be between 1 and 65535.")
 		os.Exit(2)
 	}
-	if !*web {
+	if !*webMode {
 		if strings.TrimSpace(*githubRepo) != "" && strings.TrimSpace(*experience) == "" {
 			fmt.Fprintln(os.Stderr, "Provide your background with -experience when using -github.")
 			flag.Usage()
@@ -57,7 +61,7 @@ func main() {
 		}
 	}
 
-	client, err := NewModelClient(ModelConfig{
+	client, err := mentor.NewModelClient(mentor.ModelConfig{
 		Provider: envOr("LLM_PROVIDER", ""),
 		BaseURL:  envOr("LLM_BASE_URL", ""),
 		Model:    envOr("LLM_MODEL", ""),
@@ -67,22 +71,22 @@ func main() {
 		fmt.Fprintf(os.Stderr, "configure model provider: %v\n", err)
 		os.Exit(2)
 	}
-	if *web {
+	if *webMode {
 		address := net.JoinHostPort("127.0.0.1", strconv.Itoa(*webPort))
 		fmt.Printf("Contribution Mentor web UI: http://%s\n", address)
-		if err := serveWeb(address, client); err != nil {
+		if err := web.Start(address, client); err != nil {
 			fmt.Fprintf(os.Stderr, "serve web interface: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
-	repo, err := inspectRepository(*repoPath)
+
+	repo, err := mentor.InspectRepository(*repoPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "inspect repository: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Printf("Repository: %s\nProvider: %s\nModel: %s\n", repo.Root, client.config.Provider, client.config.Model)
+	fmt.Printf("Repository: %s\nProvider: %s\nModel: %s\n", repo.Root, client.Config().Provider, client.Config().Model)
 	fmt.Println("Sending selected repository files to the configured model provider...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -90,7 +94,7 @@ func main() {
 
 	var answer string
 	if strings.TrimSpace(*githubRepo) != "" {
-		githubClient := newGitHubClient()
+		githubClient := mentor.NewGitHubClient()
 		if *issueNumber > 0 {
 			issue, err := githubClient.GetIssue(ctx, *githubRepo, *issueNumber)
 			if err != nil {
@@ -104,7 +108,7 @@ func main() {
 					fmt.Fprintf(os.Stderr, "generate proposed changes: %v\n", err)
 					os.Exit(1)
 				}
-				applied, err := applyApprovedIssueChanges(repo, changes, os.Stdin, os.Stdout)
+				applied, err := mentor.ApplyApprovedIssueChanges(repo, changes, os.Stdin, os.Stdout)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "apply proposed changes: %v\n", err)
 					os.Exit(1)
@@ -131,13 +135,13 @@ func main() {
 			answer, err = client.RecommendIssues(ctx, *experience, issues, repo)
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ask Ollama: %v\n", err)
+			fmt.Fprintf(os.Stderr, "ask model provider: %v\n", err)
 			os.Exit(1)
 		}
 	} else {
 		answer, err = client.Ask(ctx, *question, repo)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ask Ollama: %v\n", err)
+			fmt.Fprintf(os.Stderr, "ask model provider: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -145,7 +149,7 @@ func main() {
 	fmt.Println(answer)
 }
 
-func printIssues(issues []GitHubIssue) {
+func printIssues(issues []mentor.GitHubIssue) {
 	fmt.Println("\nOpen GitHub issues:")
 	for _, issue := range issues {
 		fmt.Printf("#%-5d %s\n       %s\n", issue.Number, issue.Title, issue.HTMLURL)
@@ -157,6 +161,5 @@ func envOr(name, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
 		return value
 	}
-
 	return fallback
 }

@@ -1,4 +1,4 @@
-package main
+package mentor
 
 import (
 	"bytes"
@@ -23,6 +23,10 @@ type ModelClient struct {
 	endpoint string
 	config   ModelConfig
 	http     *http.Client
+}
+
+func (c *ModelClient) Config() ModelConfig {
+	return c.config
 }
 
 type chatRequest struct {

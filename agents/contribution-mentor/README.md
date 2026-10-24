@@ -28,6 +28,16 @@ New contributors often need help understanding an unfamiliar codebase and findin
 
 ## Architecture & Data Flow
 
+The agent uses a small layered, ports-and-adapters-inspired structure: the command is the composition root, `internal/mentor` contains the core agent workflows, `internal/config` handles environment configuration, and `internal/web` adapts the same agent for HTTP. The model provider and GitHub API are called through clients in the core package. This keeps transport/configuration separate without introducing a large framework or unnecessary interfaces.
+
+```text
+cmd/contribution-mentor/  CLI entry point and dependency wiring
+internal/
+  config/                 .env loading
+  mentor/                 repository context, model client, GitHub issue workflows, approved patches
+  web/                    localhost HTTP handlers and embedded browser UI
+```
+
 ```text
 [Repository files] ----+
                        +--> [Contribution Mentor] --> [Configured model API] --> [Answer/plan]
@@ -56,7 +66,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 The example selects Gemini. Add your API key to the local `.env` file; never place it in `.env.example` or commit it. To use Ollama instead, change the provider, URL, and model to your local/Docker Ollama settings. Start the local web UI with:
 
 ```powershell
-go run . -web
+go run ./cmd/contribution-mentor -web
 ```
 
 Open `http://127.0.0.1:8080`. The `make run` target is the Docker Compose workflow and is not required for local web testing.
@@ -90,7 +100,7 @@ The Go program loads `.env` directly when run from this directory; variables alr
 For host-only development, point `LLM_BASE_URL` at a model API reachable from the host, such as a host-installed Ollama at `http://localhost:11434/v1`, then run:
 
 ```powershell
-go run . -question "What does this repository do?"
+go run ./cmd/contribution-mentor -question "What does this repository do?"
 ```
 
 This command does not start Docker. `make run` is the deployment-style Docker workflow described below.
@@ -100,12 +110,16 @@ This command does not start Docker. `make run` is the deployment-style Docker wo
 Configure `LLM_BASE_URL` in `.env` to an endpoint reachable from the host, then start the UI from this directory:
 
 ```powershell
-go run . -web
+go run ./cmd/contribution-mentor -web
 ```
 
-Open `http://127.0.0.1:8080`, enter the local repository path, and ask the mentor to analyze it. Separate buttons run `go test ./...` or `go vet ./...` from that repository root. Each check requires a root-level `go.mod` and runs only after you click its button. Tests and vet execute repository code on your computer; only run them on code you trust. The server binds to loopback and rejects cross-origin requests. Use `go run . -web -port 8090` to select another port.
+Open `http://127.0.0.1:8080`, enter the local repository path, and ask the mentor to analyze it. Separate buttons run `go test ./...` or `go vet ./...` from that repository root. Each check requires a root-level `go.mod` and runs only after you click its button. Tests and vet execute repository code on your computer; only run them on code you trust. The server binds to loopback and rejects cross-origin requests. Use `go run ./cmd/contribution-mentor -web -port 8090` to select another port.
 
-Repository source selected by the scanner is sent to the configured model provider when you ask a question. Check that provider's data-handling terms before analyzing private code. The CLI remains available for the existing workflows.
+Repository source selected by the scanner is sent to the configured model provider when you ask a question. Check that provider's data-handling terms before analyzing private code. The CLI remains available for the existing workflows:
+
+```powershell
+go run ./cmd/contribution-mentor -repo E:\path\to\repo -question "What does this project do?"
+```
 
 ### Ask about a repository
 
@@ -117,11 +131,30 @@ make run
 
 ### Find issues matching your experience
 
-Set `GITHUB_REPO` and `EXPERIENCE` in `.env`, then run `make run`. The agent fetches up to 20 recently updated open issues (excluding pull requests), prints their links, and asks the configured model to rank suitable options.
+To discover issues, provide your local checkout path with `-repo`, the GitHub repository in `OWNER/REPO` form with `-github`, and a short description of your experience with `-experience`:
+
+```powershell
+go run ./cmd/contribution-mentor `
+  -repo E:\go\src\dodoPayments `
+  -github OWNER/REPO `
+  -experience "Go developer, familiar with REST APIs and PostgreSQL"
+```
+
+Replace `OWNER/REPO` with the repository's GitHub owner and name. The agent fetches up to 20 recently updated open issues (excluding pull requests), prints their issue numbers and links, then asks the configured model to rank suitable options for your experience. Review the issue on GitHub and choose one of the suggested issue numbers; the model's recommendation is a shortlist, not a guarantee that an issue is still available.
 
 ### Get a plan for one issue
 
-Set `GITHUB_REPO`, `ISSUE`, and `EXPERIENCE` in `.env`, then run `make run`.
+Pass the chosen issue number using `-issue` to get a focused explanation and implementation/test plan:
+
+```powershell
+go run ./cmd/contribution-mentor `
+  -repo E:\go\src\dodoPayments `
+  -github OWNER/REPO `
+  -issue 42 `
+  -experience "Go developer, familiar with REST APIs and PostgreSQL"
+```
+
+Here `42` is an example issue number; use a number returned by the discovery command or shown in the GitHub issue URL.
 
 ### Propose and apply changes after review
 

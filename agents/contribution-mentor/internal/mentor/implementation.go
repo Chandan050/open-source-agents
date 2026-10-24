@@ -1,4 +1,4 @@
-package main
+package mentor
 
 import (
 	"bufio"
@@ -91,7 +91,7 @@ func stripJSONFence(response string) string {
 	return strings.TrimSpace(response)
 }
 
-func applyApprovedIssueChanges(repo Repository, changes []IssueChange, input io.Reader, output io.Writer) (bool, error) {
+func ApplyApprovedIssueChanges(repo Repository, changes []IssueChange, input io.Reader, output io.Writer) (bool, error) {
 	prepared, err := prepareIssueChanges(repo, changes)
 	if err != nil {
 		return false, err

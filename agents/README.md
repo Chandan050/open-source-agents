@@ -46,4 +46,4 @@ agents/<project-slug>/
 
 | Agent Directory | Description | Framework / Stack | Contributor |
 | :--- | :--- | :--- | :--- |
-| [`contribution-mentor`](contribution-mentor/) | Local AI mentor that analyzes a repository and suggests evidence-based contributions. | Go, Ollama, Gemma 4 | Community |
+| [`contribution-mentor`](contribution-mentor/) | Configurable AI mentor with CLI and local web UI for repository analysis and GitHub issue matching. | Go, OpenAI-compatible APIs, Gemini, Ollama | Community |

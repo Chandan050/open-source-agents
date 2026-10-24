@@ -129,6 +129,33 @@ Set `QUESTION` in `.env`, then:
 make run
 ```
 
+## Example Input & Output
+
+### Repository question
+
+Input:
+
+```text
+What does this application do? Summarize its API, storage, and payment flow.
+```
+
+Example response (illustrative; wording and details vary by provider and model):
+
+```text
+- Dodo Payments is a Go invoice and payment API.
+- It uses PostgreSQL for application data and a mock PSP to simulate payment outcomes.
+- Payment requests use idempotency keys; the service also supports recovery and signed webhooks.
+- Start the API and its dependencies with `docker compose up --build`.
+```
+
+To ask about the local `dodoPayments` checkout:
+
+```powershell
+go run ./cmd/contribution-mentor `
+  -repo E:\go\src\dodoPayments `
+  -question "What does this application do? Summarize its API, storage, and payment flow."
+```
+
 ### Find issues matching your experience
 
 To discover issues, provide your local checkout path with `-repo`, the GitHub repository in `OWNER/REPO` form with `-github`, and a short description of your experience with `-experience`:
@@ -170,17 +197,21 @@ LLM_MODEL=gemma4:e4b
 
 ## Example Configuration
 
-The committed `.env.example` selects Ollama as an example, with its API URL, model, and image in environment variables. To use another compatible provider, edit `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, and `LLM_API_KEY` in `.env`. The application sends a standard non-streaming `/chat/completions` request, using the configured model ID without validating it against a hard-coded list. No model or provider URL is compiled into the agent.
+The committed `.env.example` uses Google's OpenAI-compatible Gemini endpoint and leaves `LLM_API_KEY` empty. Add a key only to your ignored local `.env`, or configure another compatible endpoint. The application sends a standard non-streaming `/chat/completions` request using the configured model ID; it does not validate against a hard-coded model list.
 
 ## How to Test
 
 ```powershell
 go test ./...
 go vet ./...
+go build ./...
 docker compose config --quiet
+docker build -t contribution-mentor:local .
 ```
 
 Tests use mock HTTP servers and do not require a model or GitHub token.
+
+GitHub Actions checks formatting, tests, vet, build, Compose configuration, the Docker image build, documentation and environment-template completeness, secret hygiene, and pull-request scope. CI does not call a live model API or validate provider credentials; those depend on the configured provider and local key.
 
 ## Known Limitations
 
@@ -188,6 +219,7 @@ Tests use mock HTTP servers and do not require a model or GitHub token.
 - GitHub API access requires internet and may be rate-limited without a token.
 - Repository context is bounded and does not follow `.gitignore` rules beyond built-in exclusions.
 - Model output quality depends on the configured model and its context limit.
+- Hosted model APIs may return rate-limit or temporary availability errors.
 - Proposed changes are AI-generated; inspect them and run tests before using them.
 
 ## Security & Privacy Considerations
@@ -198,6 +230,11 @@ Tests use mock HTTP servers and do not require a model or GitHub token.
 - Issue content and repository files are treated as untrusted model input.
 - Proposed paths are restricted to the repository; sensitive/generated paths, symlinks, oversized proposals, and files changed since inspection are rejected.
 - The CLI does not execute repository code. The local web UI can execute only the fixed `go test ./...` and `go vet ./...` checks after an explicit click.
+
+## Future Improvements
+
+- [ ] Add GitHub issue discovery and planning to the web interface.
+- [ ] Add support for repository-specific test commands after explicit user approval.
 
 ## License
 

@@ -46,4 +46,4 @@ agents/<project-slug>/
 
 | Agent Directory | Description | Framework / Stack | Contributor |
 | :--- | :--- | :--- | :--- |
-| *(None yet)* | *Contributions will appear here once approved and merged.* | — | — |
+| [`contribution-mentor`](contribution-mentor/) | Local AI mentor that analyzes a repository and suggests evidence-based contributions. | Go, Ollama, Gemma 4 | Community |
